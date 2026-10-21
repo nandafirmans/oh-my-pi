@@ -67,3 +67,52 @@ it.skipIf(process.platform === "android")(
 		expect(await new Response(proc.stderr).text()).toContain("requires native Android/arm64 Bun");
 	},
 );
+
+it("Termux stable build requires explicit xutf opt-in and passes that scope to children", async () => {
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-termux-stable-"));
+	try {
+		const calls = path.join(dir, "build-scopes");
+		const tool = path.join(dir, "tool");
+		await Bun.write(
+			tool,
+			`#!/bin/sh
+case "$(basename "$0")" in
+  bun)
+    if [ "$1" = -p ]; then echo android-arm64; else printf '%s\\n' "$RUSTC_BOOTSTRAP" >> "$OMP_BUILD_SCOPES"; fi
+    ;;
+  rustc)
+    if [ "$1" = -vV ]; then echo 'host: aarch64-linux-android'; else echo 'rustc 1.99.1 (stable)'; fi
+    ;;
+esac
+`,
+		);
+		await fs.chmod(tool, 0o755);
+		for (const name of ["bun", "rustc", "cargo", "clang", "cmake", "ninja", "pkg-config"]) {
+			await fs.symlink(tool, path.join(dir, name));
+		}
+		const env = {
+			...process.env,
+			PATH: `${dir}${path.delimiter}${process.env.PATH}`,
+			RUSTC_BOOTSTRAP: "",
+			CARGO_BUILD_TARGET: "aarch64-linux-android",
+			OMP_BUILD_SCOPES: calls,
+		};
+		const refused = Bun.spawn(["sh", path.join(repoRoot, "scripts/termux-build.sh")], {
+			env,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(await refused.exited).toBe(1);
+		expect(await new Response(refused.stderr).text()).toContain("RUSTC_BOOTSTRAP=xutf");
+		expect(await Bun.file(calls).exists()).toBe(false);
+		const optedIn = Bun.spawn(["sh", path.join(repoRoot, "scripts/termux-build.sh")], {
+			env: { ...env, RUSTC_BOOTSTRAP: "xutf" },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(await optedIn.exited).toBe(0);
+		expect((await Bun.file(calls).text()).trim().split("\n")).toEqual(["xutf", "xutf", "xutf"]);
+	} finally {
+		await fs.rm(dir, { recursive: true, force: true });
+	}
+});
