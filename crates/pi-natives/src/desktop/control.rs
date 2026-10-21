@@ -519,11 +519,12 @@ impl ControlLease {
 		}
 	}
 
+	#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 	fn background() -> CoreResult<Self> {
 		Ok(Self { _escape: None, _kernel: KernelOwner::acquire()?, running: AtomicBool::new(false) })
 	}
 
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(any(target_os = "windows", target_os = "linux"))]
 	fn acquire_takeover(source: &CancellationSource) -> CoreResult<Self> {
 		let kernel = KernelOwner::acquire()?;
 		#[cfg(windows)]
@@ -538,6 +539,19 @@ impl ControlLease {
 			_kernel: kernel,
 			running: AtomicBool::new(false),
 		})
+	}
+
+	#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+	fn background() -> CoreResult<Self> {
+		Err(DesktopError::new(
+			super::error::ErrorCode::Unsupported,
+			"desktop control is unsupported on this operating system",
+		))
+	}
+
+	#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+	fn acquire_takeover(_source: &CancellationSource) -> CoreResult<Self> {
+		Self::background()
 	}
 }
 
@@ -895,7 +909,12 @@ pub(crate) fn grant_for_test(source: &CancellationSource) {
 			Err(error) => panic!("test kernel owner: {error:?}"),
 		}
 	};
-	let owner = ControlLease { _escape: None, _kernel: kernel, running: AtomicBool::new(false) };
+	let owner = ControlLease {
+		#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+		_escape: None,
+		_kernel: kernel,
+		running: AtomicBool::new(false),
+	};
 	*source.0.state.lock() = Some(Arc::new(owner));
 }
 
@@ -964,6 +983,19 @@ pub(crate) fn alone(test: &str) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+	#[test]
+	fn unsupported_desktop_control_refuses_both_input_modes() {
+		for takeover in [false, true] {
+			let source = CancellationSource::default();
+			let error = InputLease::acquire(&source.token(), takeover)
+				.err()
+				.expect("no desktop backend");
+			assert_eq!(error.code, crate::desktop::error::ErrorCode::Unsupported);
+			assert!(!source.control_active());
+		}
+	}
 
 	/// Removes this process's private kernel lock (see `KernelLease::path`).
 	fn remove_test_lock() {

@@ -252,6 +252,20 @@ dependency or future compiler is compatible. The phone's exact Rust version and
 successful full native build remain to be recorded; no supported Android Rust
 version range is established yet.
 
+### Follow-up desktop fallback compilation
+
+The phone reached pi-natives and exposed four Android compilation errors: a
+desktop-only `_escape` field initializer and three matches on an empty borrowed
+`AxHandle` enum. Unsupported platforms now have an unidentified accessibility
+placeholder, reject desktop input before acquiring a control lock, and compile
+a separate application-listing error path. Desktop automation remains
+unsupported on Android. An unsupported-platform Rust regression test exercises
+both input modes and checks that no control ownership is granted; it has not
+been run on an Android target here. The 15 focused Bun tests pass on Linux,
+and the Rust formatting check passes. These checks do not verify an Android
+addon build; resume it on the phone using the command above, retaining the
+existing LD_PRELOAD helper and incremental cache.
+
 ## Still required on the Android device
 
 1. Record Android version, Bun version/platform, Rust host/version, and helper

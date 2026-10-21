@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Fixed Android native builds failing to compile desktop accessibility and control fallbacks.
+
 - Fixed Termux source builds failing to resolve React and scheduler from symlink-backed Bun cache installs.
 - Added source-build support for Android/Termux arm64 with Bionic native-addon loading, shell processes, text clipboard, and system Opus.
 

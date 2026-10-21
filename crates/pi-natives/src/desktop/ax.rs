@@ -13,6 +13,10 @@ use super::{
 
 #[derive(Clone)]
 pub enum AxHandle {
+	// Keep shared accessibility code inhabited when no native backend exists.
+	#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+	#[allow(dead_code, reason = "unsupported platforms never create native accessibility handles")]
+	Unsupported,
 	#[cfg(target_os = "macos")]
 	Mac(objc2_core_foundation::CFRetained<objc2_application_services::AXUIElement>),
 	/// The element and its `RuntimeId`, read once when the handle is made;
@@ -35,6 +39,8 @@ impl AxHandle {
 	/// index.
 	const fn identified(&self) -> bool {
 		match self {
+			#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+			Self::Unsupported => false,
 			#[cfg(target_os = "macos")]
 			Self::Mac(_) => true,
 			#[cfg(target_os = "windows")]
@@ -55,6 +61,8 @@ impl AxHandle {
 impl PartialEq for AxHandle {
 	fn eq(&self, other: &Self) -> bool {
 		match (self, other) {
+			#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+			(Self::Unsupported, Self::Unsupported) => true,
 			#[cfg(target_os = "macos")]
 			(Self::Mac(a), Self::Mac(b)) => **a == **b,
 			#[cfg(target_os = "windows")]
@@ -76,6 +84,8 @@ impl Eq for AxHandle {}
 impl Hash for AxHandle {
 	fn hash<H: Hasher>(&self, state: &mut H) {
 		match self {
+			#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+			Self::Unsupported => ().hash(state),
 			#[cfg(target_os = "macos")]
 			Self::Mac(element) => (**element).hash(state),
 			#[cfg(target_os = "windows")]

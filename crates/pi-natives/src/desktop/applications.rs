@@ -1,6 +1,7 @@
 //! Installed application discovery does not require capture or input
 //! permission.
 
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 use std::path::Path;
 
 use napi_derive::napi;
@@ -72,13 +73,9 @@ pub(crate) const fn supported() -> bool {
 	cfg!(any(target_os = "macos", target_os = "windows", target_os = "linux"))
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 pub(crate) fn list(options: ApplicationQuery) -> CoreResult<Vec<Application>> {
-	#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 	let mut apps = platform::list()?;
-	#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-	let mut apps: Vec<Application> = return Err(DesktopError::invalid_target(
-		"installed application discovery is unsupported on this operating system",
-	));
 	let query = options.query.as_deref().unwrap_or_default().to_lowercase();
 	apps.retain(|app| {
 		(!options.running_only.unwrap_or(false) || app.running)
@@ -96,8 +93,16 @@ pub(crate) fn list(options: ApplicationQuery) -> CoreResult<Vec<Application>> {
 	Ok(apps)
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+pub(crate) fn list(_options: ApplicationQuery) -> CoreResult<Vec<Application>> {
+	Err(DesktopError::invalid_target(
+		"installed application discovery is unsupported on this operating system",
+	))
+}
+
 /// Resolve identity before display name; ambiguity never launches an arbitrary
 /// app.
+#[cfg(any(test, target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn resolve<'a>(apps: &'a [Application], input: &str) -> CoreResult<Option<&'a Application>> {
 	let mut exact = apps
 		.iter()
@@ -113,6 +118,7 @@ fn resolve<'a>(apps: &'a [Application], input: &str) -> CoreResult<Option<&'a Ap
 		.transpose()
 }
 
+#[cfg(any(test, target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn unique<'a>(
 	first: &'a Application,
 	second: Option<&Application>,
@@ -132,6 +138,7 @@ fn unique<'a>(
 /// application at its resolved bundle path: a bundle read alone says it is
 /// not running, so a symlink to a running application would be launched
 /// again, which reopens it.
+#[cfg(any(test, target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn with_listed_state(apps: &[Application], app: Application) -> Application {
 	apps
 		.iter()
