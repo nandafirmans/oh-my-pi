@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Android/Termux state directories ignoring configured XDG locations.
+
 ## [18.12.4] - 2026-10-20
 
 ### Breaking Changes

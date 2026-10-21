@@ -14,6 +14,7 @@ use std::{
 };
 
 use bytes::Bytes;
+#[cfg(not(target_os = "android"))]
 use opus::{Application, Channels, Decoder, Encoder};
 use parking_lot::Mutex;
 use tokio::{sync::watch, task::JoinHandle};
@@ -41,6 +42,8 @@ use webrtc::{
 	},
 };
 
+#[cfg(target_os = "android")]
+use crate::opus_compat::{Application, Channels, Decoder, Encoder};
 use crate::{
 	VoiceResult,
 	audio::{PlaybackStream, PlaybackWriter},

@@ -712,3 +712,7 @@ _made for terminals that stay open_
 - [npm](https://www.npmjs.com/package/@oh-my-pi/pi-coding-agent)
 - [Discord](https://discord.gg/4NMW9cdXZa)
 - [MIT](https://github.com/can1357/oh-my-pi/blob/main/LICENSE)
+
+### Android / Termux (source build)
+
+Native Android/arm64 Bun users can build in a separate checkout without replacing an existing installation. See [the Termux build and verification guide](docs/termux.md). Android does not use the official Linux/glibc native addon or published release binaries.

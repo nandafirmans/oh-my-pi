@@ -103,6 +103,7 @@ export function hostTargetName(host: HostInfo): string {
 			return host.avx2 ? "linux-x64-modern" : "linux-x64-baseline";
 		}
 	}
+	if (host.platform === "android" && host.arch === "arm64") return "android-arm64";
 	if (host.platform === "win32") {
 		if (host.arch === "x64") return "win32-x64-baseline";
 		if (host.arch === "arm64") return "win32-arm64";
@@ -382,6 +383,17 @@ async function main(): Promise<void> {
 		throw new Error(`Unknown OMP_NATIVE_BUILD_BACKEND "${backend}" (expected "cargo" or "bazel")`);
 	}
 	const hostOnly = options.targets.length === 1 && options.targets[0] === "host";
+	if (host.platform === "android") {
+		// There is no Android Bazel toolchain or official prebuilt leaf.
+		hostTargetName(host); // reject unsupported Android architectures early
+		if (!hostOnly || options.source || backend === "bazel" || options.bazelArgs.length > 0) {
+			throw new Error(
+				"Android supports only a local Cargo/N-API host build; use `bun run build:native` without Bazel flags",
+			);
+		}
+		await buildLocalHostAddon(host, destDir);
+		return;
+	}
 	// Backend selection: the host build defaults to the local Cargo/N-API
 	// path; bazel is opt-in for host via OMP_NATIVE_BUILD_BACKEND=bazel or
 	// extra bazel args after `--`. Explicit //:natives-* targets always go

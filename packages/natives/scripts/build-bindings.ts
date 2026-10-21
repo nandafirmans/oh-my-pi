@@ -24,6 +24,12 @@ import { generateEnumExports } from "./gen-enums";
 // pcre2-sys prefers a system libpcre2 when pkg-config finds one. Keep the
 // static build so the local addon never retains host Homebrew paths.
 process.env.PCRE2_SYS_STATIC ??= "1";
+// Termux runs a native Bionic toolchain, not an NDK cross build. Limit both
+// Rust and CMake fan-out on memory-constrained devices; explicit settings win.
+if (process.platform === "android") {
+	process.env.CARGO_BUILD_JOBS ??= "1";
+	process.env.CMAKE_BUILD_PARALLEL_LEVEL ??= "1";
+}
 
 // Windows: cc-rs and rustc auto-locate cl.exe/link.exe through the VS
 // registry, but the cmake crate (opusic-sys' bundled Opus) needs cmake —

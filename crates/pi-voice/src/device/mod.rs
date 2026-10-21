@@ -35,14 +35,24 @@ mod wasapi;
 #[cfg(target_os = "windows")]
 use wasapi as imp;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod linux;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use linux as imp;
 
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+	target_os = "macos",
+	target_os = "windows",
+	target_os = "linux",
+	target_os = "android"
+)))]
 mod unsupported;
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+	target_os = "macos",
+	target_os = "windows",
+	target_os = "linux",
+	target_os = "android"
+)))]
 use unsupported as imp;
 
 use crate::VoiceResult;
@@ -94,12 +104,12 @@ impl PlaybackDevice {
 /// (`CoreAudio` `AudioQueue` buffer count, WASAPI padding cap); `PulseAudio`
 /// scales this with the widened remote/`PULSE_LATENCY_MSEC` backlog before
 /// the stream even opens (see `linux::playback_drain_periods`).
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn playback_drain_periods(config: DeviceConfig) -> u32 {
 	imp::playback_drain_periods(config)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub const fn playback_drain_periods(_config: DeviceConfig) -> u32 {
 	3
 }

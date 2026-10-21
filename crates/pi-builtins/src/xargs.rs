@@ -1564,7 +1564,7 @@ mod tests {
 		assert!(err.contains("255"), "got: {err:?}");
 	}
 
-	#[cfg(unix)]
+	#[cfg(all(unix, not(target_os = "android")))]
 	#[tokio::test]
 	async fn signalled_child_yields_125() {
 		let (code, _, err) = run_simple(&["sh", "-c", "kill -TERM $$", "_"], "x\n").await;

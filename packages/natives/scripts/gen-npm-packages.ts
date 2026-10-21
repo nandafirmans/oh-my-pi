@@ -57,6 +57,8 @@ export const LEAF_TARGETS: readonly LeafTarget[] = [
 	{ tag: "win32-arm64", os: "win32", cpu: "arm64" },
 ];
 
+const SOURCE_ONLY_LEAF_TARGETS: readonly LeafTarget[] = [{ tag: "android-arm64", os: "android", cpu: "arm64" }];
+
 const packageDirDefault = path.join(import.meta.dir, "..");
 const NATIVE_LEAF_LEGAL_FILES = ["LICENSE", "THIRD-PARTY-NOTICES.txt"] as const;
 
@@ -116,9 +118,10 @@ function buildReadme(tag: string, manifest: LeafManifest): string {
 function selectTargets(tags: readonly string[] | undefined): readonly LeafTarget[] {
 	if (!tags) return LEAF_TARGETS;
 	const wanted = new Set(tags);
-	const targets = LEAF_TARGETS.filter(target => wanted.has(target.tag));
+	const available = [...LEAF_TARGETS, ...SOURCE_ONLY_LEAF_TARGETS];
+	const targets = available.filter(target => wanted.has(target.tag));
 	if (targets.length !== wanted.size) {
-		const known = new Set(LEAF_TARGETS.map(target => target.tag));
+		const known = new Set(available.map(target => target.tag));
 		const unknown = tags.filter(tag => !known.has(tag));
 		throw new Error(`Unknown native package tag(s): ${unknown.join(", ")}`);
 	}

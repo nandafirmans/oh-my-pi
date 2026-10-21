@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Added source-build support for Android/Termux arm64 with Bionic native-addon loading, shell processes, text clipboard, and system Opus.
+
 ## [18.12.5] - 2026-10-21
 
 ### Fixed

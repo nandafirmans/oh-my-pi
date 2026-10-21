@@ -100,7 +100,7 @@ fn parse_procargs2(buffer: &[u8]) -> Vec<String> {
 }
 
 /// Linux process primitives: procfs and pidfds.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod sys {
 	use std::{
 		fs,
@@ -163,6 +163,19 @@ pub mod sys {
 		stat_field(pid, 19)
 	}
 
+	/// Whether this exact process is still running, including zombie detection.
+	pub fn is_running(pid: i32, expected_start: u64) -> bool {
+		let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) else {
+			return false;
+		};
+		let Some(mut fields) = stat_fields(&stat) else {
+			return false;
+		};
+		let state = fields.next();
+		let start = fields.nth(18).and_then(|value| value.parse::<u64>().ok());
+		start == Some(expected_start) && !matches!(state, None | Some("Z" | "X"))
+	}
+
 	/// The recorded parent pid (`ppid`, field 4).
 	pub fn parent_pid(pid: i32) -> Option<i32> {
 		stat_field(pid, 1)
@@ -181,7 +194,7 @@ pub mod sys {
 	}
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod proc_snapshot {
 	use std::{collections::HashMap, fs, os::fd::AsFd, time::Duration};
 
@@ -347,9 +360,11 @@ mod proc_snapshot {
 			if signal == 0 {
 				return alive();
 			}
-			let Some(pidfd) = sys::open_pidfd(self.pid) else {
+			let pidfd = sys::open_pidfd(self.pid);
+			#[cfg(not(target_os = "android"))]
+			if pidfd.is_none() {
 				return false;
-			};
+			}
 			if !alive() {
 				return false;
 			}
@@ -362,7 +377,27 @@ mod proc_snapshot {
 					return libc::sigqueue(self.pid, signal, value_arg) == 0;
 				}
 			}
-			sys::pidfd_send_signal(pidfd.as_fd(), signal)
+			if let Some(pidfd) = pidfd {
+				let sent = sys::pidfd_send_signal(pidfd.as_fd(), signal);
+				#[cfg(not(target_os = "android"))]
+				return sent;
+				#[cfg(target_os = "android")]
+				if sent {
+					return true;
+				}
+			}
+			#[cfg(target_os = "android")]
+			{
+				// A start-time check narrows, but cannot eliminate, the PID-reuse
+				// race between checking procfs and kill(2) on older Android kernels.
+				if !alive() {
+					return false;
+				}
+				// SAFETY: kill takes scalar arguments; identity was checked above.
+				return unsafe { libc::kill(self.pid, signal) == 0 };
+			}
+			#[cfg(not(target_os = "android"))]
+			false
 		}
 
 		pub fn cpu_time(&self) -> Option<Duration> {
@@ -1684,7 +1719,7 @@ mod proc_snapshot {
 	}
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 pub use proc_snapshot::{ProcInfo, threads_by_pid};
 
 /// The processes a signal must never reach: this one and its ancestors.
@@ -1708,7 +1743,7 @@ pub use proc_snapshot::{ProcInfo, threads_by_pid};
 ///
 /// Listing is unaffected: `pgrep` still reports ancestors and `ps` still shows
 /// them. Only signalling consults this.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 pub(crate) struct HostProcesses {
 	/// This process and its ancestors, nearest first.
 	pub pids:  smallvec::SmallVec<[i32; 16]>,
@@ -1721,7 +1756,7 @@ pub(crate) struct HostProcesses {
 /// Keeping the walk over this rather than over [`ProcInfo`] lets the recycling
 /// cases — which are otherwise only reachable by winning a race against the OS —
 /// be tested with a synthetic tree.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 #[derive(Clone, Copy)]
 struct ChainNode {
 	ppid:  Option<i32>,
@@ -1731,7 +1766,7 @@ struct ChainNode {
 	start: u64,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 impl HostProcesses {
 	/// Walks the parent chain from the current process, taking one process-table
 	/// snapshot.
@@ -1802,7 +1837,7 @@ impl HostProcesses {
 	}
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android")))]
 mod tests {
 	use super::{HostProcesses, ProcInfo};
 

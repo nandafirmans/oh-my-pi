@@ -94,3 +94,6 @@ packages/coding-agent/bench/boot-baseline.json
 /.bazelrc.user
 
 .parity/
+
+# Isolated Termux source-run state
+.termux-test/

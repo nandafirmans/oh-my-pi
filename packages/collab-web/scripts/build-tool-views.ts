@@ -16,7 +16,8 @@ const result = await Bun.build({
 	entrypoints: [path.join(root, "src/tool-render/standalone.tsx")],
 	target: "browser",
 	format: "iife",
-	minify: true,
+	// Android Bun can abort while minifying this React/CSS graph.
+	minify: process.platform !== "android",
 	define: { "process.env.NODE_ENV": JSON.stringify("production") },
 });
 

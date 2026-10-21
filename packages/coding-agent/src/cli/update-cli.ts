@@ -60,7 +60,7 @@ const NATIVES_PACKAGE = "@oh-my-pi/pi-natives";
 /**
  * Platform tags the release pipeline publishes as
  * `@oh-my-pi/pi-natives-<tag>` leaves. Mirrors `SUPPORTED_PLATFORMS` in
- * `packages/natives/native/loader-state.js` and `LEAF_TARGETS` in
+ * `packages/natives/native/loader-state.js` (except source-only Android) and `LEAF_TARGETS` in
  * `packages/natives/scripts/gen-npm-packages.ts`; kept here as the local
  * source of truth so the update path stays free of cross-package imports.
  */

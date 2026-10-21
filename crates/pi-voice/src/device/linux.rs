@@ -79,8 +79,8 @@ impl PulseApi {
 	}
 
 	fn load() -> Result<&'static Self, String> {
-		let simple = open_library(c"libpulse-simple.so.0", libc::RTLD_NOW | libc::RTLD_GLOBAL)?;
-		let pulse = open_library(c"libpulse.so.0", libc::RTLD_NOW | libc::RTLD_GLOBAL)?;
+		let simple = open_library(LIBPULSE_SIMPLE_SONAME, libc::RTLD_NOW | libc::RTLD_GLOBAL)?;
+		let pulse = open_library(LIBPULSE_SONAME, libc::RTLD_NOW | libc::RTLD_GLOBAL)?;
 
 		// SAFETY: each symbol is resolved from the library defining this exact C
 		// API.
@@ -147,7 +147,7 @@ impl AlsaApi {
 	}
 
 	fn load() -> Result<&'static Self, String> {
-		let library = open_library(c"libasound.so.2", libc::RTLD_NOW | libc::RTLD_GLOBAL)?;
+		let library = open_library(LIBASOUND_SONAME, libc::RTLD_NOW | libc::RTLD_GLOBAL)?;
 		// SAFETY: each symbol is resolved from the library defining this exact C
 		// API.
 		let pcm_open = unsafe {
@@ -1044,3 +1044,18 @@ mod tests {
 		assert_eq!(drain_periods_for_latency(20, 200), 30);
 	}
 }
+
+#[cfg(target_os = "android")]
+const LIBPULSE_SIMPLE_SONAME: &std::ffi::CStr = c"libpulse-simple.so";
+#[cfg(not(target_os = "android"))]
+const LIBPULSE_SIMPLE_SONAME: &std::ffi::CStr = c"libpulse-simple.so.0";
+
+#[cfg(target_os = "android")]
+const LIBPULSE_SONAME: &std::ffi::CStr = c"libpulse.so";
+#[cfg(not(target_os = "android"))]
+const LIBPULSE_SONAME: &std::ffi::CStr = c"libpulse.so.0";
+
+#[cfg(target_os = "android")]
+const LIBASOUND_SONAME: &std::ffi::CStr = c"libasound.so";
+#[cfg(not(target_os = "android"))]
+const LIBASOUND_SONAME: &std::ffi::CStr = c"libasound.so.2";

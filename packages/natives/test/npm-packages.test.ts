@@ -5,6 +5,27 @@ import * as path from "node:path";
 import { buildLeafManifest, generateNpmPackages } from "../scripts/gen-npm-packages";
 
 describe("generated native npm leaf packages", () => {
+	it("packages Android only when explicitly requested, with Bionic addon identity", async () => {
+		const packageDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-natives-android-"));
+		try {
+			const filename = "pi_natives.android-arm64.node";
+			await Bun.write(path.join(packageDir, "native", filename), "Bionic addon fixture");
+			await Bun.write(path.join(packageDir, "LICENSE"), "MIT");
+			await Bun.write(path.join(packageDir, "THIRD-PARTY-NOTICES.txt"), "Notice");
+			const leaves = await generateNpmPackages({ packageDir, version: "18.12.5", tags: ["android-arm64"] });
+			const manifest = await Bun.file(path.join(leaves[0].dir, "package.json")).json();
+			expect(manifest.os).toEqual(["android"]);
+			expect(manifest.cpu).toEqual(["arm64"]);
+			expect(manifest.main).toBe(`./${filename}`);
+			expect(await Bun.file(path.join(leaves[0].dir, filename)).text()).toBe("Bionic addon fixture");
+			await expect(generateNpmPackages({ packageDir, version: "18.12.5" })).rejects.toThrow(
+				"Missing native addon files for linux-x64",
+			);
+		} finally {
+			await fs.rm(packageDir, { recursive: true, force: true });
+		}
+	});
+
 	it("builds an x64 leaf manifest that exposes all addon files without package exports", () => {
 		const addonFiles = ["pi_natives.linux-x64-baseline.node", "pi_natives.linux-x64-modern.node"];
 		const manifest = buildLeafManifest({

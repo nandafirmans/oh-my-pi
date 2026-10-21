@@ -5,9 +5,12 @@
 //! caller thread.
 //! This avoids worker-thread `AppKit` pasteboard warnings in CLI contexts.
 
+#[cfg(any(not(target_os = "android"), test))]
 use std::io::Cursor;
 
+#[cfg(not(target_os = "android"))]
 use arboard::{Clipboard, Error as ClipboardError, ImageData};
+#[cfg(any(not(target_os = "android"), test))]
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use napi::{JsString, bindgen_prelude::*};
 use napi_derive::napi;
@@ -31,6 +34,7 @@ pub struct ClipboardImage {
 	pub mime_type: String,
 }
 
+#[cfg(not(target_os = "android"))]
 fn encode_png(image: ImageData<'_>) -> Result<Vec<u8>> {
 	let width = u32::try_from(image.width)
 		.map_err(|_| Error::from_reason("Clipboard image width overflow"))?;
@@ -42,6 +46,7 @@ fn encode_png(image: ImageData<'_>) -> Result<Vec<u8>> {
 	rgba_to_png(buffer)
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn rgba_to_png(buffer: RgbaImage) -> Result<Vec<u8>> {
 	let capacity = (buffer
 		.width()
@@ -65,6 +70,7 @@ fn rgba_to_png(buffer: RgbaImage) -> Result<Vec<u8>> {
 /// skips 12 trailing mask bytes that those headers embed instead), which is
 /// why Qt-based screenshot tools (`PixPin`, `Snipaste`, ...) fail through
 /// arboard in the first place (#3426).
+#[cfg(any(not(target_os = "android"), test))]
 fn dib_to_png(dib: &[u8]) -> Result<Vec<u8>> {
 	const FILE_HEADER_SIZE: u64 = 14;
 	const INFO_HEADER_SIZE: u64 = 40;
@@ -195,7 +201,7 @@ fn set_clipboard_text(text: &str) -> Result<()> {
 /// exits, so a transient `Clipboard` is sufficient. Keeping the write on the
 /// calling thread also avoids worker-thread `AppKit` pasteboard warnings on
 /// macOS.
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn set_clipboard_text(text: &str) -> Result<()> {
 	let mut clipboard = Clipboard::new()
 		.map_err(|err| Error::from_reason(format!("Failed to access clipboard: {err}")))?;
@@ -212,6 +218,7 @@ fn set_clipboard_text(text: &str) -> Result<()> {
 ///
 /// # Errors
 /// Returns an error if clipboard access fails.
+#[cfg(not(target_os = "android"))]
 #[napi]
 pub fn read_text_from_clipboard() -> task::Promise<Option<String>> {
 	task::blocking("clipboard.read_text", (), move |_| -> Result<Option<String>> {
@@ -230,6 +237,7 @@ pub fn read_text_from_clipboard() -> task::Promise<Option<String>> {
 /// decoding run after [`CLIPBOARD_ACCESS`] is released: they only touch owned
 /// buffers, and holding the lock through them would stall a synchronous copy
 /// on the JS thread for the length of a large encode.
+#[cfg(not(target_os = "android"))]
 enum ImageRead {
 	Image(ImageData<'static>),
 	/// arboard found no image, but a bitmap format is advertised; carries the
@@ -241,6 +249,7 @@ enum ImageRead {
 	Failed(ClipboardError, Option<Vec<u8>>),
 }
 
+#[cfg(not(target_os = "android"))]
 fn png_image(bytes: Vec<u8>) -> ClipboardImage {
 	ClipboardImage { data: Uint8Array::from(bytes), mime_type: "image/png".to_string() }
 }
@@ -251,6 +260,7 @@ fn png_image(bytes: Vec<u8>) -> ClipboardImage {
 ///
 /// # Errors
 /// Returns an error if clipboard access fails or image encoding fails.
+#[cfg(not(target_os = "android"))]
 #[napi]
 pub fn read_image_from_clipboard() -> task::Promise<Option<ClipboardImage>> {
 	task::blocking("clipboard.read_image", (), move |_| -> Result<Option<ClipboardImage>> {
@@ -438,4 +448,67 @@ mod tests {
 		oversized_header[0..4].copy_from_slice(&0xffff_ffffu32.to_le_bytes());
 		assert!(dib_to_png(&oversized_header).is_err(), "header size beyond buffer must not decode");
 	}
+}
+
+/// Android text clipboard access requires the Termux:API app and package.
+#[cfg(target_os = "android")]
+fn set_clipboard_text(text: &str) -> Result<()> {
+	use std::{
+		io::Write,
+		process::{Command, Stdio},
+	};
+	// stdin preserves leading dashes and avoids command-line size limits.
+	let mut child = Command::new("termux-clipboard-set")
+		.stdin(Stdio::piped())
+		.stdout(Stdio::null())
+		.stderr(Stdio::piped())
+		.spawn()
+		.map_err(|err| {
+			Error::from_reason(format!("Install Termux:API for clipboard access: {err}"))
+		})?;
+	let write_result = child
+		.stdin
+		.take()
+		.expect("piped clipboard stdin")
+		.write_all(text.as_bytes());
+	let output = child
+		.wait_with_output()
+		.map_err(|err| Error::from_reason(format!("Clipboard command failed: {err}")))?;
+	if !output.status.success() {
+		return Err(Error::from_reason(format!(
+			"termux-clipboard-set failed: {}",
+			String::from_utf8_lossy(&output.stderr)
+		)));
+	}
+	write_result.map_err(|err| Error::from_reason(format!("Clipboard write failed: {err}")))
+}
+
+/// Read text through Termux:API; surface missing/denied API access as an error.
+#[cfg(target_os = "android")]
+#[napi]
+pub fn read_text_from_clipboard() -> task::Promise<Option<String>> {
+	task::blocking("clipboard.read_text", (), move |_| {
+		let _access = CLIPBOARD_ACCESS.lock();
+		let output = std::process::Command::new("termux-clipboard-get")
+			.output()
+			.map_err(|err| {
+				Error::from_reason(format!("Install Termux:API for clipboard access: {err}"))
+			})?;
+		if !output.status.success() {
+			return Err(Error::from_reason(format!(
+				"termux-clipboard-get failed: {}",
+				String::from_utf8_lossy(&output.stderr)
+			)));
+		}
+		String::from_utf8(output.stdout)
+			.map(Some)
+			.map_err(|err| Error::from_reason(format!("Clipboard text is not UTF-8: {err}")))
+	})
+}
+
+/// Termux:API exposes no image clipboard command.
+#[cfg(target_os = "android")]
+#[napi]
+pub fn read_image_from_clipboard() -> task::Promise<Option<ClipboardImage>> {
+	task::blocking("clipboard.read_image", (), move |_| Ok(None))
 }
