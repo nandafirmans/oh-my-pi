@@ -41,21 +41,24 @@ Termux compiler does not need `alloc_error_hook`; desktop builds retain it.
 However, **this does not make the whole dependency graph stable-compatible**:
 `xutf 1.5.0` unconditionally enables `portable_simd` and `stmt_expr_attributes`,
 with no scalar/stable Cargo feature. It is used by builtins, editing and natives.
-A working native Android nightly compiler is the normal route.
+Vendored `brush-core` also enables `process_setsid` on Unix, including Android.
+Its Rust crate name is `brush_core` (underscore). A working native Android
+nightly compiler is the normal route.
 
 With Termux's stable compiler, an explicit experimental alternative is:
 
 ```sh
-RUSTC_BOOTSTRAP=xutf sh scripts/termux-build.sh
+RUSTC_BOOTSTRAP=xutf,brush_core sh scripts/termux-build.sh
 ```
 
 Rust supports a crate-scoped `RUSTC_BOOTSTRAP` value: this permits unstable
-features for `xutf` only during that command. It does not replace Rust with
+features for `xutf` and `brush_core` only during that command. It does not replace Rust with
 nightly, stabilize the SIMD API, or guarantee compatibility with every Rust
 version. Avoid setting `RUSTC_BOOTSTRAP=1` globally or editing shell startup
 files. Leave it unset to require a native nightly toolchain instead. Dependency
 minimum Rust versions and Bionic compatibility still apply. The build helper
-now checks this before installing dependencies.
+now checks for both crate names before installing dependencies. An xutf-only
+opt-in is rejected early, because it would still fail at brush-core.
 
 ```sh
 cd "$HOME"
@@ -65,7 +68,7 @@ cd omp-termux-v18.12.5-test
 # Native nightly:
 sh scripts/termux-build.sh
 # OR explicit experimental route with Termux stable:
-# RUSTC_BOOTSTRAP=xutf sh scripts/termux-build.sh
+# RUSTC_BOOTSTRAP=xutf,brush_core sh scripts/termux-build.sh
 ```
 
 The helper checks platform and build prerequisites before installing local
@@ -229,18 +232,25 @@ Rust stable 1.99.1 reproduced E0554 without the variable and succeeded with
 `RUSTC_BOOTSTRAP=xutf` (upstream dead-code warnings remain). This is a metadata
 compilation check of xutf, not a full addon build, Android check or runtime test.
 The build-helper tests verify early refusal on stable without explicit opt-in
-and inheritance of the crate-scoped variable by build subprocesses.
+and inheritance of the crate-scoped variable by build subprocesses. A later
+phone build reached brush-core and reported E0554 for `process_setsid`; the
+recommended scope was expanded to `xutf,brush_core`. The helper tests now reject
+a missing or incomplete scope and accept either ordering of the two crate names.
 
 If dependency installation and tool-view generation already passed, resume the
 native build without repeating those steps:
 
 ```sh
-RUSTC_BOOTSTRAP=xutf bun run build:native
+RUSTC_BOOTSTRAP=xutf,brush_core bun run build:native
 ```
 
 The Rust incremental build cache is retained. Do not run `cargo clean` for E0554.
-The phone's exact Rust version and successful full native build remain to be
-recorded; no supported Android Rust version range is established yet.
+An audit of the checked-in Rust crate-root feature gates found brush-core's
+Unix `process_setsid` and pi-natives' allocation hook; the latter is excluded on
+Android. This audit and the xutf check do not establish that every registry
+dependency or future compiler is compatible. The phone's exact Rust version and
+successful full native build remain to be recorded; no supported Android Rust
+version range is established yet.
 
 ## Still required on the Android device
 

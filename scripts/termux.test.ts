@@ -68,7 +68,7 @@ it.skipIf(process.platform === "android")(
 	},
 );
 
-it("Termux stable build requires explicit xutf opt-in and passes that scope to children", async () => {
+it("Termux stable build requires both nightly-crate opt-ins and passes that scope to children", async () => {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-termux-stable-"));
 	try {
 		const calls = path.join(dir, "build-scopes");
@@ -103,15 +103,24 @@ esac
 			stderr: "pipe",
 		});
 		expect(await refused.exited).toBe(1);
-		expect(await new Response(refused.stderr).text()).toContain("RUSTC_BOOTSTRAP=xutf");
+		expect(await new Response(refused.stderr).text()).toContain("RUSTC_BOOTSTRAP=xutf,brush_core");
 		expect(await Bun.file(calls).exists()).toBe(false);
-		const optedIn = Bun.spawn(["sh", path.join(repoRoot, "scripts/termux-build.sh")], {
+		const incomplete = Bun.spawn(["sh", path.join(repoRoot, "scripts/termux-build.sh")], {
 			env: { ...env, RUSTC_BOOTSTRAP: "xutf" },
 			stdout: "pipe",
 			stderr: "pipe",
 		});
+		expect(await incomplete.exited).toBe(1);
+		expect(await Bun.file(calls).exists()).toBe(false);
+		// Crate names form a set: either ordering must work.
+		const scope = "brush_core,xutf";
+		const optedIn = Bun.spawn(["sh", path.join(repoRoot, "scripts/termux-build.sh")], {
+			env: { ...env, RUSTC_BOOTSTRAP: scope },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
 		expect(await optedIn.exited).toBe(0);
-		expect((await Bun.file(calls).text()).trim().split("\n")).toEqual(["xutf", "xutf", "xutf"]);
+		expect((await Bun.file(calls).text()).trim().split("\n")).toEqual([scope, scope, scope]);
 	} finally {
 		await fs.rm(dir, { recursive: true, force: true });
 	}

@@ -18,21 +18,22 @@ case "$(rustc -vV)" in
     *"host: aarch64-linux-android"*) ;;
     *) echo 'Rust must be a native aarch64-linux-android toolchain.' >&2; exit 1 ;;
 esac
-# xutf 1.5 uses portable_simd and stmt_expr_attributes unconditionally.
-# Keep the choice explicit on Termux's stable compiler; never enable unstable
-# features for the whole dependency graph automatically.
+# Known Android-active nightly gates: xutf (SIMD/statement attributes) and
+# vendored brush_core (process_setsid). Keep stable opt-in explicit and scoped.
 case "$(rustc --version)" in
     *-nightly*|*-dev*) ;;
     *)
-        case ",${RUSTC_BOOTSTRAP:-}," in
-            ,1,|*,xutf,*) ;;
-            *)
-                echo 'xutf requires nightly Rust. For an experimental stable-Termux build, run:' >&2
-                echo '  RUSTC_BOOTSTRAP=xutf sh scripts/termux-build.sh' >&2
-                echo 'This opts xutf out of stable feature guarantees; see docs/termux.md.' >&2
-                exit 1
-                ;;
-        esac
+        for unstable_crate in xutf brush_core; do
+            case ",${RUSTC_BOOTSTRAP:-}," in
+                ,1,|*,"$unstable_crate",*) ;;
+                *)
+                    echo 'xutf and brush_core require nightly Rust. For an experimental stable-Termux build, run:' >&2
+                    echo '  RUSTC_BOOTSTRAP=xutf,brush_core sh scripts/termux-build.sh' >&2
+                    echo 'This opts only the named crates out of stable feature guarantees; see docs/termux.md.' >&2
+                    exit 1
+                    ;;
+            esac
+        done
         ;;
 esac
 case "${CARGO_BUILD_TARGET:-aarch64-linux-android}" in
