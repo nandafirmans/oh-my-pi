@@ -49,7 +49,7 @@ sh scripts/termux-build.sh
 ```
 
 The helper checks platform and build prerequisites before installing local
-workspace dependencies. It runs the frozen Bun install without lifecycle hooks,
+workspace dependencies. It runs a forced, copyfile-backed frozen Bun install without lifecycle hooks,
 explicitly generates tool views, then uses the current local Cargo/N-API build.
 It writes dependencies/generated files/build outputs in this checkout; it does
 not register or change a global command. Cargo's ordinary shared download cache
@@ -60,6 +60,33 @@ Both `CARGO_BUILD_JOBS` and `CMAKE_BUILD_PARALLEL_LEVEL` default to `1` on Andro
 explicit settings are respected. The default `local` Cargo profile avoids the
 shipping profile's fat LTO. Start with one job on the phone. No Bazel/NDK cross
 build is required or selected for an Android host.
+
+### Recover from missing React/scheduler during tool-view generation
+
+If Bun reports `Could not resolve: "scheduler"` and `"react"` from
+`~/.bun/install/cache/react-dom@...`, the dependencies are symlinked into the
+shared cache. The bundler resolves React DOM from that location and cannot find
+its sibling dependencies. This is an installation-layout failure, before Rust.
+
+The build helper now uses `--backend=copyfile --force`, which repairs an existing
+symlink-backed install in this checkout without deleting the cache or changing
+versions/the lockfile. In an existing checkout of this branch:
+
+```sh
+git pull --ff-only
+sh scripts/termux-build.sh
+```
+
+For the equivalent local dependency repair before updating the script:
+
+```sh
+bun install --frozen-lockfile --ignore-scripts --backend=copyfile --force
+bun run gen:tool-views
+```
+
+Do not clear the global Bun cache or add React/scheduler globally. The packages
+are already declared in the workspace/lockfile. Dependency copies use more disk
+space than symlinks. Keep the existing syscall helper exported for these steps.
 
 ## Run without sharing production state
 
@@ -163,6 +190,16 @@ bun run fmt:rs
 # With cargo-nextest and the complete native toolchain installed:
 bun run test:rs
 ```
+
+### Follow-up dependency-layout regression (Bun 1.4.3)
+
+On Linux x64, a minimal React 19.2.7/React DOM 19.2.7 project installed with
+`--backend=symlink` reproduced both reported `scheduler`/`react` resolution
+errors from Bun's cache. Reinstalling the same project with
+`--frozen-lockfile --ignore-scripts --backend=copyfile --force` made the same
+browser bundle succeed. The workspace tool-view generator and focused Bun tests
+also pass with copyfile installation. This verifies the dependency-layout fix
+on Linux; the repaired install still needs confirmation on the phone.
 
 ## Still required on the Android device
 

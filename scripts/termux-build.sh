@@ -32,8 +32,11 @@ CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-1}
 OMP_NATIVE_BUILD_BACKEND=cargo
 export CARGO_BUILD_JOBS CMAKE_BUILD_PARALLEL_LEVEL OMP_NATIVE_BUILD_BACKEND
 
-# Skip dependency lifecycle hooks; run the required workspace generator explicitly.
-bun install --frozen-lockfile --ignore-scripts
+# Keep dependency files inside this checkout. Symlink-backed installs resolve
+# react-dom from Bun's global cache, where its react/scheduler siblings are absent.
+# Force reinstall also repairs a previous symlink-backed attempt without deleting
+# the shared cache or changing global installs. Keep lifecycle hooks disabled.
+bun install --frozen-lockfile --ignore-scripts --backend=copyfile --force
 bun run gen:tool-views
 bun run build:native
 printf '%s\n' 'Built this checkout. Test it with: sh scripts/termux-run.sh --version'
